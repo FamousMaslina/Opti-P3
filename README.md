@@ -12,5 +12,5 @@ Inspired by MS-DOS
 * (Linux Support & Tutorial coming in N/A)
 
 ## Update log 0.1:
-* Master Version. Not lots of commands. Just to make the hardware and dirs work together.
-* Added CPUs support
+* Added many stuff...
+* I promise that i'll add back docs and so on...
