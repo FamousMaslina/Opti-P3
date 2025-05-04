@@ -11,6 +11,7 @@ Inspired by MS-DOS
 ### For Linux:
 * (Linux Support & Tutorial coming in N/A)
 
-## Update log 0.1:
-* Added many stuff...
-* I promise that i'll add back docs and so on...
+## Update log 0.1.2:
+* Readded DEBUG mode
+* Readded GPU, Soundcard, Modem support
+* and tried some other things that failed.
