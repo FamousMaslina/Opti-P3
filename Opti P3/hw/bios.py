@@ -59,7 +59,7 @@ def detect_hardware():
     hw_types = [
         ("asdawd2k3a403", "idcpu.py", "cpu"),
         ("KSADFAS", "idmb.py", "mb"),
-        ("kajsaed", "idhd.py", "hd"),
+        ("hdd1name", "idhd.py", "hd"),
         ("mmmnni", "idmon.py", "mon"),
         ("kkeyb", "idkey.py", "key"),
         ("gpu_identifier", "idgpu.py", "gpu"),
@@ -99,6 +99,52 @@ hd_module = load_module(hd) if hd else None
 mon_module = load_module(mon)
 key_module = load_module(key)
 
+# Utility to capture input with a timeout for BIOS prompts
+def timed_input(prompt, timeout):
+    """Return user input if entered within timeout seconds, else None."""
+    print(prompt, end='', flush=True)
+    if os.name == 'nt':
+        import msvcrt
+        start = time.time()
+        buf = ''
+        while time.time() - start < timeout:
+            if msvcrt.kbhit():
+                char = msvcrt.getwch()
+                if char in ('\r', '\n'):
+                    print()
+                    return buf
+                buf += char
+            time.sleep(0.05)
+        print()
+        return None
+    else:
+        import select, sys
+        sys.stdout.flush()
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        if ready:
+            return sys.stdin.readline().strip()
+        print()
+        return None
+
+# Helper to retrieve storage info from either dedicated HD module or
+# motherboard IDE ports
+def get_primary_storage():
+    if hd_module and hasattr(hd_module, 'hddname'):
+        size = getattr(hd_module, 'hddspace', None)
+        if size:
+            return f"{hd_module.hddname} ({size}KB)"
+        return hd_module.hddname
+
+    for attr in dir(mb_module):
+        if attr.startswith('portIDE'):
+            port = getattr(mb_module, attr)
+            if isinstance(port, dict) and port.get('use', False):
+                name = port.get('hdd1name') or port.get('hdd2name')
+                size = port.get('hdd1storageSTR') or port.get('hdd2storageSTR')
+                if name:
+                    return f"{name} ({size})" if size else name
+    return 'None'
+
 # === BIOS/MB Compatibility Check ===
 if not hasattr(mb_module, 'bcode') or mb_module.bcode != required_mb_code:
     print(f"{bios_name} ERROR: Incompatible motherboard!")
@@ -114,10 +160,16 @@ def show_system_info():
     print(f"Motherboard: {getattr(mb_module, 'mbName', 'Unknown')}")
     print(f"CPU: {cpu_module.cName} @ {cpu_module.cFreqS}{cpu_module.cFreqUnit}")
     print(f"Memory: {getattr(mb_module, 'mbMemSTR', 'Unknown')}")
-    print(f"Primary Storage: {getattr(hd_module, 'hddname', 'None')}")
+    print(f"Primary Storage: {get_primary_storage()}")
     print(f"Monitor: {getattr(mon_module, 'monitorName', 'Standard VGA')}")
     print(f"Fast Boot: {'Enabled' if FASTBOOT else 'Disabled'}")
     print("=========================\n")
+
+# Allow user to enter BIOS shortly after POST
+def check_bios_prompt():
+    choice = timed_input("Press B to enter BIOS setup...", 2)
+    if choice and choice.lower().startswith('b'):
+        bios_menu()
 
 # === CMOS Setup ===
 def standard_cmos_setup():
@@ -208,8 +260,9 @@ time.sleep(BIOS_DELAY * 10)
 print("\nDetected Hardware:")
 print(f"- CPU: {cpu_module.cName}")
 print(f"- MB: {getattr(mb_module, 'mbName', 'Unknown')}")
-print(f"- Storage: {getattr(hd_module, 'hddname', 'None')}")
+print(f"- Storage: {get_primary_storage()}")
 time.sleep(BIOS_DELAY * 5)
+check_bios_prompt()
 
 try:
     bios_ini = os.path.join(SYS_DIR, "bios.ini")

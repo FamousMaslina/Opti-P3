@@ -59,6 +59,7 @@ Hardware Info:
 -------------
 bios           - Enter BIOS setup
 dvcman         - Show hardware information
+hdinfo         - Display hard drive details
 
 Press Enter for next page...""",
 

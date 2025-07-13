@@ -452,7 +452,7 @@ class HardwareManager:
                             
                     # Hard drive detection
                     if not self.hardware['hd']:
-                        if 'hddname' in content or 'hddspace' in content:
+                        if ('hdd1name' in content or 'portIDE' in content):
                             self.create_id_file('hd', file)
                             print(f" - Detected Storage: {file}")
                             continue
@@ -611,6 +611,25 @@ def create_floppy_drives(mb_module):
         except OSError as e:
             print(f"Failed to create drive {drive_name}: {e}")
 
+# Helper to obtain storage information from the detected hardware
+def get_storage_summary(hd_module, mb_module):
+    if hd_module and hasattr(hd_module, 'hddname'):
+        size = getattr(hd_module, 'hddspace', None)
+        if size:
+            return f"{hd_module.hddname} ({size}KB)"
+        return hd_module.hddname
+
+    if mb_module:
+        for attr in dir(mb_module):
+            if attr.startswith('portIDE'):
+                port = getattr(mb_module, attr)
+                if isinstance(port, dict) and port.get('use', False):
+                    name = port.get('hdd1name') or port.get('hdd2name')
+                    size = port.get('hdd1storageSTR') or port.get('hdd2storageSTR')
+                    if name:
+                        return f"{name} ({size})" if size else name
+    return "No hard drive detected"
+
 
 def init_hw():
     global hw_manager
@@ -639,10 +658,7 @@ def init_hw():
     else:
         print("Motherboard: Not detected")
     
-    if hd:
-        print(f"Storage: {getattr(hd, 'hddname', 'Unknown')} ({getattr(hd, 'hddspace', '?')}KB)")
-    else:
-        print("Storage: No hard drive detected")
+    print(f"Storage: {get_storage_summary(hd, mb)}")
         
     if gpu:
         print(f"GPU: {getattr(gpu, 'gName', 'Unknown')} ({getattr(gpu, 'gVram', '?')}MB VRAM)")
@@ -769,6 +785,13 @@ def soundinfo():
         print(f"Stereo: {'Yes' if getattr(sound, 'stereo', False) else 'No'}")
     else:
         print("\nNo sound card detected")
+    print()
+
+def hdinfo():
+    hd = hw_manager.get_component('hd')
+    mb = hw_manager.get_component('mb')
+    print("\nHard Drive Information:")
+    print(get_storage_summary(hd, mb))
     print()
 def connect_internet():
     modem = hw_manager.get_component('modem')
@@ -928,6 +951,7 @@ def main():
         'gpuinfo': gpuinfo,
         'modeminfo': modeminfo,
         'soundinfo': soundinfo,
+        'hdinfo': hdinfo,
         'internet': connect_internet,
         'debug': toggle_debug_mode,
         'var': show_variables,
@@ -1128,11 +1152,17 @@ def bios():
 
 
 def info():
-        print()
-        cpu = hw_manager.get_component('cpu')
-        print("Opti P3", op3vIST)
-        print("Running on", cpu.cName, "at", getattr(cpu, 'cFreqS', '?') + getattr(cpu, 'cFreqUnit', 'MHz'))
-        print()
+    print()
+    cpu = hw_manager.get_component('cpu')
+    mb = hw_manager.get_component('mb')
+    hd = hw_manager.get_component('hd')
+    print("Opti P3", op3vIST)
+    if cpu:
+        print("CPU:", cpu.cName, "@", getattr(cpu, 'cFreqS', '?') + getattr(cpu, 'cFreqUnit', 'MHz'))
+    if mb:
+        print("Motherboard:", mb.mbName)
+    print("Storage:", get_storage_summary(hd, mb))
+    print()
     
 if __name__ == "__main__":
     if not os.path.exists("hw"):
