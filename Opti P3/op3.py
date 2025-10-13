@@ -1,3 +1,4 @@
+#op3.py
 import os
 import re
 import sys
@@ -14,8 +15,31 @@ osName = "Opti P3"
 initial_directory = os.getcwd()
 current_directory = initial_directory
 import subprocess
-op3vIST = "0.1.3"
+op3vIST = "0.1.4"
 op3vIINT = 0.1
+CURRENT_DRIVE = 'O'
+DRIVE_ROOTS = {'O': initial_directory}
+FLOPPY_LETTERS = set()
+
+def setup_drives():
+    global FLOPPY_LETTERS
+    DRIVE_ROOTS['O'] = initial_directory
+    FLOPPY_LETTERS = set()
+    for letter in ('A', 'B', 'C', 'D'):
+        p = os.path.join(initial_directory, letter)
+        if os.path.isdir(p):
+            DRIVE_ROOTS[letter] = p
+            FLOPPY_LETTERS.add(letter)
+
+def switch_drive(letter: str):
+    global CURRENT_DRIVE, current_directory
+    letter = letter.upper()
+    if letter not in DRIVE_ROOTS:
+        print(f"Drive {letter}: not found")
+        return
+    CURRENT_DRIVE = letter
+    current_directory = DRIVE_ROOTS[letter]
+
 def linebr(number):
    print("=" * number)
 def linebr2(number):
@@ -550,6 +574,26 @@ class HardwareManager:
 
 hw_manager = None
 
+
+def _extract_ide_drives(mb_module):
+    drives = []
+    if not mb_module:
+        return drives
+    for attr in dir(mb_module):
+        if attr.startswith('portIDE'):
+            port = getattr(mb_module, attr)
+            if isinstance(port, dict) and port.get('use', False):
+                # name: first key that ends with 'name'
+                name = next((v for k, v in port.items() if k.lower().endswith('name')), 'IDE Device')
+                # human size string if available, else INT → "NNN KB"
+                size_str = next((v for k, v in port.items() if k.lower().endswith('storagestr')), None)
+                if not size_str:
+                    size_int = next((v for k, v in port.items() if 'storage' in k.lower() and isinstance(v, int)), None)
+                    size_str = f"{size_int} KB" if isinstance(size_int, int) else "Unknown"
+                drives.append((name, size_str))
+    return drives
+
+
 def batteryinfo():
     battery = hw_manager.get_component('battery')
     laptop = hw_manager.get_component('laptop')
@@ -639,8 +683,11 @@ def init_hw():
     else:
         print("Motherboard: Not detected")
     
-    if hd:
-        print(f"Storage: {getattr(hd, 'hddname', 'Unknown')} ({getattr(hd, 'hddspace', '?')}KB)")
+    drives = _extract_ide_drives(mb)
+    if drives:
+        print("Storage:")
+        for i, (name, size) in enumerate(drives, 1):
+            print(f"  {i}. {name} ({size})")
     else:
         print("Storage: No hard drive detected")
         
@@ -671,7 +718,9 @@ def sleep_time_in_app_load():
 
 
 def helloworld():
-    hw_manager.delay_before_print("It works!!!", 'in_app')
+    hw_manager.delay_before_print('in_app')
+    print("It works!!!")
+
 
 def nameO():
     print("Opti P3", op3vIST)
@@ -882,6 +931,9 @@ def set_variable(variable, value):
 
 
 def main():
+    global hw_manager
+    if hw_manager is None:
+        init_hw()
     cls()
     nameO()
     config = configparser.ConfigParser()
@@ -904,7 +956,7 @@ def main():
     command_mappings = {
         'helloworld': helloworld,
         'info': info,
-        'bios': bios,
+        'bios': bios_menu_cmd,
         'computername': hw_manager.computername,
         'autostart': hw_manager.autostart,
         'name': hw_manager.nameO,
@@ -947,21 +999,29 @@ def main():
     }
 
     while True:
-        relative_path = os.path.relpath(current_directory, initial_directory)
+        root_of_drive = DRIVE_ROOTS.get(CURRENT_DRIVE, initial_directory)
+        relative_path = os.path.relpath(current_directory, root_of_drive)
         if relative_path == ".":
             relative_path = ""
-    
         debug_indicator = " [DEBUG]" if is_debug_mode() else ""
-        prompt = f"O:/{relative_path}{debug_indicator}> " if relative_path else f"O:/{debug_indicator}> "
-    
+        prompt = (f"{CURRENT_DRIVE}:/{relative_path}{debug_indicator}> "
+                  if relative_path else f"{CURRENT_DRIVE}:/{debug_indicator}> ")
+
         try:
             inp = input(prompt).strip()
             if not inp:
                 continue
-            
+
+            # Allow bare "A:" / "B:" to switch drives
+            if len(inp) == 2 and inp[1] == ':' and inp[0].isalpha():
+                switch_drive(inp[0])
+                continue
+
             parts = inp.split()
-            cmd = parts[0].lower()
+            cmd_raw = parts[0]
+            cmd = cmd_raw.lower()
             args = parts[1:] if len(parts) > 1 else []
+
             if cmd == 'set' and len(args) >= 2:
                 set_variable(args[0], ' '.join(args[1:]))
                 continue
@@ -1007,12 +1067,15 @@ def main():
             print(f"Error: {str(e)}")
 
 def ls():
-    """List directory contents"""
+    """List directory contents (scoped to current drive)."""
     try:
-        print(f"\nDirectory of O:/{os.path.relpath(current_directory, initial_directory) or 'root'}\n")
+        root_of_drive = DRIVE_ROOTS.get(CURRENT_DRIVE, initial_directory)
+        rel = os.path.relpath(current_directory, root_of_drive)
+        shown = rel if rel != "." else ""
+        print(f"\nDirectory of {CURRENT_DRIVE}:/{shown or ''}\n")
         print(f"{'Type':<8} {'Name':<20} {'Size':>10}")
         print("-" * 40)
-        
+
         for item in sorted(os.listdir(current_directory)):
             full_path = os.path.join(current_directory, item)
             if os.path.isdir(full_path):
@@ -1023,29 +1086,57 @@ def ls():
             if os.path.isfile(full_path):
                 size = os.path.getsize(full_path)
                 print(f"{'':<8} {item:<20} {size:>10,}")
-                
+
         print()
     except Exception as e:
         print(f"Error listing directory: {str(e)}")
 
+
 def cd(folder_name):
-    global current_directory
-    
+    global current_directory, CURRENT_DRIVE
+
+    # Block attempts like: cd A (require A:)
+    if folder_name.upper() in FLOPPY_LETTERS and not folder_name.endswith(':'):
+        print(f"Use '{folder_name.upper()}:' to switch to drive {folder_name.upper()}.")
+        return
+
+    # Handle drive-qualified paths: "A:" or "A:\sub\dir"
+    m = re.match(r'^([A-Za-z]):(?:[/\\](.*))?$', folder_name)
+    if m:
+        letter = m.group(1).upper()
+        subpath = m.group(2)
+        if letter not in DRIVE_ROOTS:
+            print(f"Drive {letter}: not found")
+            return
+        switch_drive(letter)
+        if subpath:
+            dest = os.path.join(DRIVE_ROOTS[letter], subpath)
+            if os.path.isdir(dest):
+                current_directory = dest
+            else:
+                print(f"Directory not found: {subpath}")
+        return
+
+    # Normal navigation within the current drive
+    root_of_drive = DRIVE_ROOTS.get(CURRENT_DRIVE, initial_directory)
+
     if folder_name == "..":
-        if current_directory != initial_directory:
+        # Don't allow climbing above drive root
+        if os.path.normpath(current_directory) != os.path.normpath(root_of_drive):
             current_directory = os.path.dirname(current_directory)
         return
     elif folder_name == ".":
         return
     elif folder_name.lower() == "root":
-        current_directory = initial_directory
+        current_directory = root_of_drive
         return
-    
+
     new_path = os.path.join(current_directory, folder_name)
     if os.path.isdir(new_path):
         current_directory = new_path
     else:
         print(f"Directory not found: {folder_name}")
+
 
 def mkdir(folder_name):
     try:
@@ -1066,8 +1157,9 @@ def touch(file_name):
 
 def root():
     global current_directory
-    current_directory = initial_directory
-    print("Returned to root directory")
+    current_directory = DRIVE_ROOTS.get(CURRENT_DRIVE, initial_directory)
+    print(f"Returned to {CURRENT_DRIVE}:/")
+
 
 def manage_extensions():
     hw_manager.manage_extensions()
@@ -1086,6 +1178,7 @@ def mainBoot():
     try:
         if mb:
             create_floppy_drives(mb)
+            setup_drives()
 
         hw_manager.delay_before_print('in_app')
         print(f" - CPU: {cpu.cName} @ {getattr(cpu, 'cFreqS', '?')}{getattr(cpu, 'cFreqUnit', 'MHz')}")
@@ -1123,6 +1216,27 @@ def bios():
         )
     except subprocess.CalledProcessError as e:
         print(f"BIOS execution failed with return code {e.returncode}")
+    except Exception as e:
+        print(f"Unexpected error running BIOS: {e}")
+
+def bios_menu_cmd():
+    print("Initializing BIOS (menu)...")
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    bios_path = os.path.join(base_dir, "hw", "bios.py")
+
+    if not os.path.exists(bios_path):
+        print("BIOS not found in hw directory")
+        return
+
+    try:
+        subprocess.run(
+            [sys.executable, bios_path, "--menu"],
+            check=True,
+            cwd=base_dir
+        )
+    except subprocess.CalledProcessError as e:
+        print(f"BIOS setup exited with code {e.returncode}")
     except Exception as e:
         print(f"Unexpected error running BIOS: {e}")
 

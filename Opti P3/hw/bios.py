@@ -1,3 +1,4 @@
+#bios
 import os
 from os import name, system
 import sys
@@ -5,18 +6,68 @@ import time
 import configparser
 from importlib import import_module
 
-def clear():
-    if name == 'nt':
-        _ = system('cls')
-    else:
-        _ = system('clear')
-
 # === Setup Paths ===
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 HW_DIR = os.path.join(PROJECT_ROOT, "hw")
 SYS_DIR = os.path.join(PROJECT_ROOT, "sys")
 INI_DIR = os.path.join(SYS_DIR, "ini")
+BIOS_CONFIG_FILE = os.path.join(SYS_DIR, "bios.ini")
+
+def _load_boot_order():
+    cfg = configparser.ConfigParser()
+    if os.path.exists(BIOS_CONFIG_FILE):
+        cfg.read(BIOS_CONFIG_FILE)
+    if 'bios' not in cfg:
+        cfg['bios'] = {}
+    order = cfg['bios'].get('boot_order', 'IDE, FLOPPY')
+    order_list = [x.strip().upper() for x in order.split(',') if x.strip()]
+    if not order_list:
+        order_list = ['IDE', 'FLOPPY']  # sane default
+    return cfg, order_list
+
+def _save_boot_order(order_list):
+    cfg = configparser.ConfigParser()
+    if os.path.exists(BIOS_CONFIG_FILE):
+        cfg.read(BIOS_CONFIG_FILE)
+    if 'bios' not in cfg:
+        cfg['bios'] = {}
+    cfg['bios']['boot_order'] = ', '.join(order_list)
+    os.makedirs(SYS_DIR, exist_ok=True)
+    with open(BIOS_CONFIG_FILE, 'w') as f:
+        cfg.write(f)
+
+def bios_features_setup():
+    _, order = _load_boot_order()
+    while True:
+        clear()
+        print("\nBIOS Features Setup")
+        print("-------------------")
+        print(f"Boot Order: {', '.join(order)}")
+        print("\n1. Swap first two devices")
+        print("2. Set IDE first")
+        print("3. Set FLOPPY first")
+        print("4. Back (save)")
+        choice = input("\nEnter choice: ").strip()
+        if choice == "1":
+            if len(order) >= 2:
+                order[0], order[1] = order[1], order[0]
+        elif choice == "2":
+            order = ['IDE', 'FLOPPY']
+        elif choice == "3":
+            order = ['FLOPPY', 'IDE']
+        elif choice == "4":
+            _save_boot_order(order)
+            print("Saved.")
+            time.sleep(0.8)
+            break
+
+def clear():
+    if name == 'nt':
+        _ = system('cls')
+    else:
+        _ = system('clear')
+
 
 # Add the hw directory to sys.path for module importing
 if HW_DIR not in sys.path:
@@ -51,7 +102,7 @@ time.sleep(BIOS_DELAY)
 
 # === BIOS Configuration ===
 bios_name = "Phoenix 386 BIOS"
-bios_version = "3.1.0"
+bios_version = "3.1.1"
 required_mb_code = "386basic"
 
 # === Hardware Detection ===
@@ -106,7 +157,18 @@ if not hasattr(mb_module, 'bcode') or mb_module.bcode != required_mb_code:
     print(f"Found MB code: {getattr(mb_module, 'bcode', 'None')}")
     while True:
         time.sleep(1)
-
+def _primary_drive_from_mb(mb_module):
+    for attr in dir(mb_module):
+        if attr.startswith("portIDE"):
+            port = getattr(mb_module, attr)
+            if isinstance(port, dict) and port.get("use", False):
+                name = next((v for k, v in port.items() if k.lower().endswith("name")), "IDE Device")
+                size = next((v for k, v in port.items() if k.lower().endswith("storagestr")), None)
+                if not size:
+                    i = next((v for k, v in port.items() if "storage" in k.lower() and isinstance(v, int)), None)
+                    size = f"{i} KB" if isinstance(i, int) else "Unknown"
+                return f"{name} ({size})"
+    return "None"
 # === System Info ===
 def show_system_info():
     print(f"\n{bios_name} v{bios_version}")
@@ -114,7 +176,7 @@ def show_system_info():
     print(f"Motherboard: {getattr(mb_module, 'mbName', 'Unknown')}")
     print(f"CPU: {cpu_module.cName} @ {cpu_module.cFreqS}{cpu_module.cFreqUnit}")
     print(f"Memory: {getattr(mb_module, 'mbMemSTR', 'Unknown')}")
-    print(f"Primary Storage: {getattr(hd_module, 'hddname', 'None')}")
+    print(f"Primary Storage: {_primary_drive_from_mb(mb_module)}")
     print(f"Monitor: {getattr(mon_module, 'monitorName', 'Standard VGA')}")
     print(f"Fast Boot: {'Enabled' if FASTBOOT else 'Disabled'}")
     print("=========================\n")
@@ -186,6 +248,8 @@ def bios_menu():
 
         if choice == "1":
             standard_cmos_setup()
+        elif choice == "2":
+            bios_features_setup()
         elif choice == "6":
             print("Saving BIOS settings...")
             time.sleep(1)
@@ -198,6 +262,10 @@ def bios_menu():
             time.sleep(1)
 
 # === Boot Flow ===
+if __name__ == "__main__":
+    if "--menu" in sys.argv or os.environ.get("OP3_BIOS_MENU") == "1":
+        bios_menu()
+        sys.exit(0)
 print(f"{bios_name} v{bios_version}")
 print("Performing system checks...")
 time.sleep(BIOS_DELAY * 5)  # Slightly longer for initial checks
@@ -208,7 +276,8 @@ time.sleep(BIOS_DELAY * 10)
 print("\nDetected Hardware:")
 print(f"- CPU: {cpu_module.cName}")
 print(f"- MB: {getattr(mb_module, 'mbName', 'Unknown')}")
-print(f"- Storage: {getattr(hd_module, 'hddname', 'None')}")
+print(f"- Storage: {_primary_drive_from_mb(mb_module)}")
+
 time.sleep(BIOS_DELAY * 5)
 
 try:
@@ -216,19 +285,19 @@ try:
     if os.path.exists(bios_ini):
         print("\nFound BIOS configuration, booting system...")
         time.sleep(BIOS_DELAY * 5)
-        sys.path.append(PROJECT_ROOT)
-        import op3
-        op3.main()
+        sys.exit(0)
     else:
         print("\nNo BIOS configuration found")
         print("Press 1 to enter SETUP, any other key to continue...")
         if input() == "1":
             bios_menu()
         else:
-            sys.path.append(PROJECT_ROOT)
-            import op3
-            op3.main()
+            sys.exit(0)
+
 except ImportError:
     print("\nError: Operating system not found!")
     input("Press Enter to enter BIOS setup...")
     bios_menu()
+
+def biosmenu():
+    return bios_menu()

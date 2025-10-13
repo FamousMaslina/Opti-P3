@@ -1,1 +1,1 @@
-mb = 'toshiba_t4900ct.py'
+mb = '386basic.py'

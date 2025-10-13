@@ -1,1 +1,1 @@
-gpu = 'toshiba_t4900ct.py'
+gpu = 'S3 ViRGE.py'

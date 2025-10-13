@@ -1,1 +1,1 @@
-key = 'toshiba_t4900ct.py'
+key = 'ps2keyboard.py'

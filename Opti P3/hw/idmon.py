@@ -1,1 +1,1 @@
-mon = 'toshiba_t4900ct.py'
+mon = 'vgamonitor.py'

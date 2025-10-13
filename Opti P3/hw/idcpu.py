@@ -1,1 +1,1 @@
-cpu = 'toshiba_t4900ct.py'
+cpu = 'Intel_i386DX_40.py'

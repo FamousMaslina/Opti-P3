@@ -11,11 +11,12 @@ Inspired by MS-DOS
 ### For Linux:
 * (Linux Support & Tutorial coming in N/A)
 
-## Update log 0.1.3:
-* Added laptop OEM support
-* Added new hardware in HardwareManger class (laptop, battery)
-* Added new commands (laptopinfo, battery, power, rescanhw)
-
+## Update log 0.1.4:
+* Fixed #7
+* FIxed #6
+* FIxed #1
+* Improved simulation of Floppy Drives
+* Fixed System Boot-up Sequence
+* Reinforced init hw checks
 ## New issues identified:
-* HDD not being found at all (wrong search string, not looking in mb PortIDE(x) Possible versions affected: (0.1 - 0.1.3))
-* New mysterious error at loading hw splash screen. (0.1.X)
+* dvcman not implemented #8 ?

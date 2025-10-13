@@ -1,1 +1,1 @@
-modem = 'toshiba_t4900ct.py'
+modem = 'modem144.py'
