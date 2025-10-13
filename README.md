@@ -19,4 +19,4 @@ Inspired by MS-DOS
 * Fixed System Boot-up Sequence
 * Reinforced init hw checks
 ## New issues identified:
-* dvcman not implemented #8 ?
+* dvcman not implemented #9
