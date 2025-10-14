@@ -1,0 +1,1 @@
+cpu = 'Intel_i386DX_40.py'

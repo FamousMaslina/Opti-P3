@@ -1,0 +1,125 @@
+import os
+from configparser import ConfigParser
+
+def debug(msg):
+    print(f"[DEBUG] {msg}")
+
+def find_op3_py():
+    debug("Starting search for op3.py...")
+    current = os.path.abspath(os.path.dirname(__file__))
+    debug(f"Initial directory: {current}")
+
+    while True:
+        candidate = os.path.join(current, "op3.py")
+        debug(f"Checking: {candidate}")
+        if os.path.isfile(candidate):
+            debug("Found op3.py!")
+            return candidate
+        parent = os.path.dirname(current)
+        if parent == current:
+            debug("Reached filesystem root. op3.py not found.")
+            raise FileNotFoundError("Could not find op3.py in any parent directories.")
+        current = parent
+        debug(f"Moving up to: {current}")
+
+try:
+    OP3_PATH = find_op3_py()
+except FileNotFoundError as e:
+    print(f"[ERROR] {e}")
+    OP3_PATH = None
+
+WAIFU_INI_PATH = os.path.join(os.path.dirname(__file__), "waifu.ini")
+
+WAIFU_IMPORT = "from plugins.waifu_mode import get_waifu_greeting"
+WAIFU_CALL = """waifu_greet = get_waifu_greeting()
+if waifu_greet:
+    print(waifu_greet)
+else:"""
+
+def linebr(n):
+    print("=" * n)
+
+def clear():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+def inject_waifu_into_op3():
+    if not os.path.exists(OP3_PATH):
+        print("op3.py not found.")
+        return
+
+    with open(OP3_PATH, 'r') as f:
+        lines = f.readlines()
+
+    already_imported = any(WAIFU_IMPORT in line for line in lines)
+    already_called = any("waifu_greet = get_waifu_greeting()" in line for line in lines)
+
+    if already_imported and already_called:
+        print("Looks like waifu mode is already injected into op3.py.")
+        return
+
+    # Inject import
+    for idx, line in enumerate(lines):
+        if line.strip().startswith("from") or line.strip().startswith("import"):
+            continue
+        lines.insert(idx, WAIFU_IMPORT + "\n")
+        break
+
+    # Inject call after all imports
+    for idx, line in enumerate(lines):
+        if "def " in line or "__main__" in line:
+            # Insert just before any function definitions
+            lines.insert(idx, "\n" + WAIFU_CALL + "\n    print(f\"OP3 v{op3vIST} ready.\")\n")
+            break
+
+    with open(OP3_PATH, 'w') as f:
+        f.writelines(lines)
+
+    print("Successfully injected waifu greeting into op3.py!")
+
+def setup_waifu_mode():
+    clear()
+    print("~*~ OP3 WAIFU MODE ACTIVATOR ~*~\n")
+    print("Konnichiwa, my lovely user~\n")
+
+    title = input("How would you like me to call you? (e.g. Master, Senpai, Boss): ").strip()
+    name = input("What name should I use for you? (e.g. Alex, Hikari-sama): ").strip()
+
+    config = ConfigParser()
+    config["waifu"] = {
+        "title": title,
+        "name": name
+    }
+
+    with open(WAIFU_INI_PATH, 'w') as f:
+        config.write(f)
+
+    print(f"\nSugoi~! Setup complete, {title} {name}-san")
+    input("Would you like me to inject myself into OP3's startup? (Y/n): ").strip().lower()
+    if not input or input == "y":
+        inject_waifu_into_op3()
+
+def get_waifu_greeting():
+    if os.path.exists(WAIFU_INI_PATH):
+        config = ConfigParser()
+        config.read(WAIFU_INI_PATH)
+        title = config["waifu"].get("title", "Senpai")
+        name = config["waifu"].get("name", "Anon")
+        return f"{title} {name}, your humble OP3-chan v{op3vIST} is ready to serve!"
+    return None
+
+def run_waifu_mode():
+    clear()
+    setup_waifu_mode()
+
+commands = {
+    'waifu_setup': run_waifu_mode,
+    'waifu': run_waifu_mode
+}
+
+info = {
+    'title': 'OP3 Waifu Mode',
+    'version': '1.0.0 ~uwu~',
+    'author': 'FamousMaslina',
+    'description': 'Injects cringe directly into OP3 startup with loving anime energy',
+    'commands': ', '.join(commands.keys())
+}

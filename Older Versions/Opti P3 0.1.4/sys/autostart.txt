@@ -1,0 +1,2 @@
+# OP3 Autostart commands
+print("hello world")
