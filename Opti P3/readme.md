@@ -1,8 +1,6 @@
-## Update log 0.1.3:
-* Added laptop OEM support
-* Added new hardware in HardwareManger class (laptop, battery)
-* Added new commands (laptopinfo, battery, power, rescanhw)
-
+## Update log 0.1.5:
+* Added 'dvcman' (fix #9)
+* Added lots of CPUs ported from OP2
+* Added OP2 app compatibility (BETA)
 ## New issues identified:
-* HDD not being found at all (wrong search string, not looking in mb PortIDE(x) Possible versions affected: (0.1 - 0.1.3))
-* New mysterious error at loading hw splash screen. (0.1.X)
+

@@ -15,7 +15,7 @@ osName = "Opti P3"
 initial_directory = os.getcwd()
 current_directory = initial_directory
 import subprocess
-op3vIST = "0.1.4"
+op3vIST = "0.1.5"
 op3vIINT = 0.1
 CURRENT_DRIVE = 'O'
 DRIVE_ROOTS = {'O': initial_directory}
@@ -966,6 +966,7 @@ def main():
         'exit': lambda: exit(0),
         'reboot': lambda: [print("Rebooting..."), time.sleep(1), main()],
         'shutdown': lambda: [print("Shutting down..."), time.sleep(1), exit(0)],
+        'dvcman': lambda: subprocess.run([sys.executable, os.path.join('sys', 'dvcman.py')]),
         'dir': ls,
         'ls': ls,
         'cd': cd,

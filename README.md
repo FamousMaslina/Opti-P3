@@ -11,12 +11,10 @@ Inspired by MS-DOS
 ### For Linux:
 * (Linux Support & Tutorial coming in N/A)
 
-## Update log 0.1.4:
-* Fixed #7
-* FIxed #6
-* FIxed #1
-* Improved simulation of Floppy Drives
-* Fixed System Boot-up Sequence
-* Reinforced init hw checks
+## Update log 0.1.5:
+* Added 'dvcman' (fix #9)
+* Added lots of CPUs ported from OP2
+* Added OP2 app compatibility (BETA)
 ## New issues identified:
-* dvcman not implemented #9
+
+
