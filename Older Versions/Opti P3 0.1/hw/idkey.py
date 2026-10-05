@@ -1,1 +1,0 @@
-key = 'ps2keyboard.py'

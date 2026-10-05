@@ -1,1 +1,0 @@
-sound = 'AdLib Gold.py'

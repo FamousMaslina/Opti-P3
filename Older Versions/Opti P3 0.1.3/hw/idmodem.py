@@ -1,1 +1,0 @@
-modem = 'toshiba_t4900ct.py'
