@@ -18,7 +18,7 @@ import configparser
 info = {
     "title": "OP2 Compatibility Layer",
     "version": "rc-0.1.0",
-    "author": "FamousMaslina+ChatGPT-5-Thinking-Extended",
+    "author": "FamousMaslina+GPT-5-Thinking-Extended",
     "description": "Run OP2 programs inside OP3 with spoofed OP2/API versions."
 }
 
