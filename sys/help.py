@@ -38,7 +38,12 @@ mkdir <dir>    - Create directory
 rmdir <dir>    - Remove empty directory
 del <file>     - Delete file (aliases: delete, rm)
 touch <file>   - Create empty file
+edit [file]    - Nano-style text editor (Ctrl+O save, Ctrl+X exit)
 run <program>  - Run a Python program
+opfs/drives    - List virtual OPFS drives
+opfs add <letter> <hdd|floppy> [label] - Add a virtual disk
+<letter>:      - Switch drives (example: A:)
+cd X:/<dir>    - Open a directory on a virtual drive
 
 Press Enter for next page...""",
 

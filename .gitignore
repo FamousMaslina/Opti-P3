@@ -1,0 +1,13 @@
+# VS Code settings folders
+.vscode/
+vsc_code/
+
+# Python bytecode caches
+__pycache__/
+*.py[cod]
+
+# Persistent OPFS virtual disk contents
+.opfs/
+
+# Local test suites
+tests/

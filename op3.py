@@ -11,34 +11,58 @@ from os import name, system
 import configparser
 import os
 from datetime import datetime
+_opfs_spec = importlib.util.spec_from_file_location(
+    'op3_opfs', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sys', 'opfs.py'))
+_opfs_module = importlib.util.module_from_spec(_opfs_spec)
+_opfs_spec.loader.exec_module(_opfs_module)
+OPFS = _opfs_module.OPFS
 osName = "Opti P3"
-initial_directory = os.getcwd()
-current_directory = initial_directory
+initial_directory = os.path.dirname(os.path.abspath(__file__))
+current_directory = 'O:/'
 import subprocess
-op3vIST = "0.1.5"
-op3vIINT = 0.1
+op3vIST = "0.2.0"
+op3vIINT = 0.2
 CURRENT_DRIVE = 'O'
-DRIVE_ROOTS = {'O': initial_directory}
+DRIVE_ROOTS = {'O': 'O:/'}
 FLOPPY_LETTERS = set()
+filesystem = OPFS(os.path.join(os.getcwd(), '.opfs'), working_directory=os.getcwd())
 
-def setup_drives():
-    global FLOPPY_LETTERS
-    DRIVE_ROOTS['O'] = initial_directory
-    FLOPPY_LETTERS = set()
-    for letter in ('A', 'B', 'C', 'D'):
-        p = os.path.join(initial_directory, letter)
-        if os.path.isdir(p):
-            DRIVE_ROOTS[letter] = p
-            FLOPPY_LETTERS.add(letter)
+def setup_drives(mb_module=None):
+    filesystem.load()
+    if mb_module:
+        ports = sorted(dir(mb_module), key=lambda attr: [int(p) if p.isdigit() else p for p in re.split(r'(\d+)', attr)])
+        for attr in ports:
+            if not attr.startswith(('portIDE', 'portFDC')):
+                continue
+            port = getattr(mb_module, attr)
+            if not isinstance(port, dict) or not port.get('use', False):
+                continue
+            kind = 'floppy' if attr.startswith('portFDC') else 'hdd'
+            label = next((str(v) for k, v in port.items() if k.lower().endswith('name')), attr)
+            filesystem.mount_device(attr, kind, label, port.get('drive_letter'))
+    _sync_opfs()
+
+def _sync_opfs():
+    global CURRENT_DRIVE, current_directory, FLOPPY_LETTERS
+    CURRENT_DRIVE = filesystem.current[0]
+    current_directory = filesystem.current
+    DRIVE_ROOTS.clear()
+    DRIVE_ROOTS.update({letter: letter + ':/' for letter in filesystem.drives})
+    FLOPPY_LETTERS = {letter for letter, info in filesystem.drives.items() if info['kind'] == 'floppy'}
+
+def opfs_command(*args):
+    if not args or args == ('drives',):
+        for letter, drive in sorted(filesystem.drives.items()):
+            print(f"{letter}:/  OPFS  {drive['kind']:<7} {drive['label']}")
+    elif len(args) >= 3 and args[0] == 'add':
+        filesystem.add_drive(args[1], args[2], ' '.join(args[3:]))
+        _sync_opfs()
+        print(f"Created OPFS drive {args[1].upper().rstrip(':')}:/")
+    else:
+        print('Usage: opfs [drives | add <letter> <hdd|floppy> [label]]')
 
 def switch_drive(letter: str):
-    global CURRENT_DRIVE, current_directory
-    letter = letter.upper()
-    if letter not in DRIVE_ROOTS:
-        print(f"Drive {letter}: not found")
-        return
-    CURRENT_DRIVE = letter
-    current_directory = DRIVE_ROOTS[letter]
+    cd(letter.upper().rstrip(':') + ':/')
 
 def linebr(number):
    print("=" * number)
@@ -638,22 +662,8 @@ def powerstatus():
 
 
 def create_floppy_drives(mb_module):
-    floppy_ports = []
-    
-    for attr in dir(mb_module):
-        if attr.startswith('portFDC'):
-            port = getattr(mb_module, attr)
-            if isinstance(port, dict) and port.get('use', False):
-                floppy_ports.append(port)
-    
-    drive_letters = ['A', 'B', 'C', 'D']
-    for i, port in enumerate(floppy_ports[:4]):  # Max 4 drives (A-D)
-        drive_name = drive_letters[i]
-        try:
-            os.makedirs(drive_name, exist_ok=True)
-            print(f"Created floppy drive: {drive_name} ({port.get('flo1name', 'Unnamed')})")
-        except OSError as e:
-            print(f"Failed to create drive {drive_name}: {e}")
+    """Compatibility entry point: mount all configured OPFS storage devices."""
+    setup_drives(mb_module)
 
 
 def init_hw():
@@ -731,7 +741,6 @@ def create_template(template_name):
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from op3 import cls, clear, info, init_hw
 
@@ -746,42 +755,16 @@ if __name__ == "__main__":
     template_function()
 """
 
-    programs_dir = os.path.join(os.path.dirname(__file__), "programs")
-    os.makedirs(programs_dir, exist_ok=True)
-    template_file_path = os.path.join(programs_dir, f"{template_name}.py")
-    with open(template_file_path, 'w') as f:
-        f.write(template_content)
-
-    print(f"Template file '{template_file_path}' created successfully.")
+    template_path = filesystem.resolve(f"{template_name}.py")
+    filesystem.host_path(template_path).write_text(template_content, encoding='utf-8')
+    print(f"Template file '{template_path}' created successfully.")
 
 def rmdir(folder_name):
-    try:
-        dir_path = os.path.join(current_directory, folder_name)
-        if os.path.exists(dir_path):
-            if not os.listdir(dir_path):  # Check if directory is empty
-                os.rmdir(dir_path)
-                print(f"Removed directory: {folder_name}")
-            else:
-                print(f"Error: Directory not empty - {folder_name}")
-        else:
-            print(f"Directory not found: {folder_name}")
-    except Exception as e:
-        print(f"Error removing directory: {str(e)}")
+    _file_operation('remove directory', folder_name, lambda: filesystem.remove(folder_name, directory=True))
+
 
 def delete_file(file_name):
-    try:
-        file_path = os.path.join(current_directory, file_name)
-        if os.path.isfile(file_path):
-            os.remove(file_path)
-            print(f"Deleted: {file_name}")
-        elif os.path.isdir(file_path):
-            print(f"Error: '{file_name}' is a directory (use 'rmdir')")
-        else:
-            print(f"File not found: {file_name}")
-    except PermissionError:
-        print(f"Error: Permission denied for '{file_name}'")
-    except Exception as e:
-        print(f"Error deleting file: {str(e)}")
+    _file_operation('delete file', file_name, lambda: filesystem.remove(file_name))
 
 
 def gpuinfo():
@@ -934,6 +917,8 @@ def main():
     global hw_manager
     if hw_manager is None:
         init_hw()
+    if not filesystem.drives:
+        setup_drives(hw_manager.get_component('mb'))
     cls()
     nameO()
     config = configparser.ConfigParser()
@@ -967,11 +952,14 @@ def main():
         'reboot': lambda: [print("Rebooting..."), time.sleep(1), main()],
         'shutdown': lambda: [print("Shutting down..."), time.sleep(1), exit(0)],
         'dvcman': lambda: subprocess.run([sys.executable, os.path.join('sys', 'dvcman.py')]),
+        'opfs': opfs_command,
+        'drives': opfs_command,
         'dir': ls,
         'ls': ls,
         'cd': cd,
         'mkdir': mkdir,
         'touch': touch,
+        'edit': edit,
         'rmdir': rmdir,
         'deldir': rmdir,
         'root': root,
@@ -1000,13 +988,8 @@ def main():
     }
 
     while True:
-        root_of_drive = DRIVE_ROOTS.get(CURRENT_DRIVE, initial_directory)
-        relative_path = os.path.relpath(current_directory, root_of_drive)
-        if relative_path == ".":
-            relative_path = ""
         debug_indicator = " [DEBUG]" if is_debug_mode() else ""
-        prompt = (f"{CURRENT_DRIVE}:/{relative_path}{debug_indicator}> "
-                  if relative_path else f"{CURRENT_DRIVE}:/{debug_indicator}> ")
+        prompt = f"{filesystem.current}{debug_indicator}> "
 
         try:
             inp = input(prompt).strip()
@@ -1029,14 +1012,21 @@ def main():
 
             if cmd in ('del', 'delete', 'rm'):
                 if args:
-                    delete_file(args[0])
+                    delete_file(' '.join(args).strip('"'))
                 else:
                     print("Error: Missing filename (usage: del <filename>)")
                 continue
             
             if cmd in command_mappings:
-                if cmd in ('cd', 'mkdir', 'touch', 'rmdir') and args:
-                    command_mappings[cmd](args[0])
+                if cmd == 'opfs':
+                    opfs_command(*args)
+                elif cmd == 'edit':
+                    edit(' '.join(args).strip('"') or None)
+                elif cmd in ('cd', 'mkdir', 'touch', 'rmdir', 'deldir'):
+                    if args:
+                        command_mappings[cmd](' '.join(args).strip('"'))
+                    else:
+                        print(f'Usage: {cmd} <path>')
                 else:
                     command_mappings[cmd]()
             elif cmd in extensions:
@@ -1046,120 +1036,82 @@ def main():
                     print(f"Error executing plugin command: {str(e)}")
 
             elif cmd == 'run' and args:
-                file_name = args[0]
-                program_path = os.path.join(current_directory, file_name)
-                if os.path.exists(program_path):
-                    try:
-                        subprocess.run([sys.executable, program_path])
-                    except Exception as e:
-                        print(f"Error running program: {str(e)}")
+                file_name = ' '.join(args).strip('"')
+                program_path = filesystem.host_path(file_name)
+                if program_path.is_file():
+                    program_env = os.environ.copy()
+                    program_env['PYTHONPATH'] = os.pathsep.join(
+                        filter(None, [initial_directory, program_env.get('PYTHONPATH')]))
+                    subprocess.run([sys.executable, str(program_path)],
+                                   cwd=str(filesystem.host_path()), env=program_env)
                 else:
-                    print(f"Program not found: {file_name}")
+                    print(f"Program not found: {filesystem.resolve(file_name)}")
 
             elif cmd == 'create-template' and args:
-                create_template(args[0])
+                create_template(' '.join(args).strip('"'))
 
             else:
                 print(f"Unknown command: {cmd}")
                 
         except KeyboardInterrupt:
             print("\nUse 'exit' or 'shutdown' to quit")
+        except (OSError, ValueError) as e:
+            _opfs_error(e)
         except Exception as e:
             print(f"Error: {str(e)}")
 
+def edit(filename=None):
+    from programs.edit import edit_file
+    edit_file(filesystem, filename)
+
+
 def ls():
-    """List directory contents (scoped to current drive)."""
     try:
-        root_of_drive = DRIVE_ROOTS.get(CURRENT_DRIVE, initial_directory)
-        rel = os.path.relpath(current_directory, root_of_drive)
-        shown = rel if rel != "." else ""
-        print(f"\nDirectory of {CURRENT_DRIVE}:/{shown or ''}\n")
+        print(f"\nDirectory of {filesystem.current} (OPFS)\n")
         print(f"{'Type':<8} {'Name':<20} {'Size':>10}")
-        print("-" * 40)
-
-        for item in sorted(os.listdir(current_directory)):
-            full_path = os.path.join(current_directory, item)
-            if os.path.isdir(full_path):
-                print(f"{'<DIR>':<8} {item:<20} {'':>10}")
-
-        for item in sorted(os.listdir(current_directory)):
-            full_path = os.path.join(current_directory, item)
-            if os.path.isfile(full_path):
-                size = os.path.getsize(full_path)
-                print(f"{'':<8} {item:<20} {size:>10,}")
-
+        print('-' * 40)
+        for item, directory, size in filesystem.listdir():
+            shown_size = '' if directory else f'{size:,}'
+            shown_type = '<DIR>' if directory else ''
+            print(f'{shown_type:<8} {item:<20} {shown_size:>10}')
         print()
-    except Exception as e:
-        print(f"Error listing directory: {str(e)}")
+    except (OSError, ValueError) as error:
+        _opfs_error(error)
 
 
 def cd(folder_name):
-    global current_directory, CURRENT_DRIVE
-
-    # Block attempts like: cd A (require A:)
-    if folder_name.upper() in FLOPPY_LETTERS and not folder_name.endswith(':'):
-        print(f"Use '{folder_name.upper()}:' to switch to drive {folder_name.upper()}.")
-        return
-
-    # Handle drive-qualified paths: "A:" or "A:\sub\dir"
-    m = re.match(r'^([A-Za-z]):(?:[/\\](.*))?$', folder_name)
-    if m:
-        letter = m.group(1).upper()
-        subpath = m.group(2)
-        if letter not in DRIVE_ROOTS:
-            print(f"Drive {letter}: not found")
-            return
-        switch_drive(letter)
-        if subpath:
-            dest = os.path.join(DRIVE_ROOTS[letter], subpath)
-            if os.path.isdir(dest):
-                current_directory = dest
-            else:
-                print(f"Directory not found: {subpath}")
-        return
-
-    # Normal navigation within the current drive
-    root_of_drive = DRIVE_ROOTS.get(CURRENT_DRIVE, initial_directory)
-
-    if folder_name == "..":
-        # Don't allow climbing above drive root
-        if os.path.normpath(current_directory) != os.path.normpath(root_of_drive):
-            current_directory = os.path.dirname(current_directory)
-        return
-    elif folder_name == ".":
-        return
-    elif folder_name.lower() == "root":
-        current_directory = root_of_drive
-        return
-
-    new_path = os.path.join(current_directory, folder_name)
-    if os.path.isdir(new_path):
-        current_directory = new_path
-    else:
-        print(f"Directory not found: {folder_name}")
+    try:
+        filesystem.chdir('/' if folder_name.lower() == 'root' else folder_name)
+        _sync_opfs()
+    except (OSError, ValueError) as error:
+        _opfs_error(error)
 
 
 def mkdir(folder_name):
-    try:
-        new_path = os.path.join(current_directory, folder_name)
-        os.makedirs(new_path, exist_ok=True)
-        print(f"Created directory: {folder_name}")
-    except Exception as e:
-        print(f"Error creating directory: {str(e)}")
+    _file_operation('create directory', folder_name, lambda: filesystem.mkdir(folder_name))
+
 
 def touch(file_name):
-    try:
-        new_path = os.path.join(current_directory, file_name)
-        with open(new_path, 'w'):
-            pass
-        print(f"Created file: {file_name}")
-    except Exception as e:
-        print(f"Error creating file: {str(e)}")
+    _file_operation('create file', file_name, lambda: filesystem.touch(file_name))
+
 
 def root():
-    global current_directory
-    current_directory = DRIVE_ROOTS.get(CURRENT_DRIVE, initial_directory)
-    print(f"Returned to {CURRENT_DRIVE}:/")
+    cd('/')
+    print(f'Returned to {filesystem.current}')
+
+
+def _opfs_error(error):
+    # OSError text includes backing host paths; expose only its reason.
+    reason = error.strerror if isinstance(error, OSError) else str(error)
+    print(f'OPFS: {reason}')
+
+
+def _file_operation(action, path, operation):
+    try:
+        operation()
+        print(f'OPFS: {action}: {filesystem.resolve(path)}')
+    except (OSError, ValueError) as error:
+        _opfs_error(error)
 
 
 def manage_extensions():
@@ -1177,9 +1129,7 @@ def mainBoot():
     print("\nSystem booting...")
 
     try:
-        if mb:
-            create_floppy_drives(mb)
-            setup_drives()
+        setup_drives(mb)
 
         hw_manager.delay_before_print('in_app')
         print(f" - CPU: {cpu.cName} @ {getattr(cpu, 'cFreqS', '?')}{getattr(cpu, 'cFreqUnit', 'MHz')}")
