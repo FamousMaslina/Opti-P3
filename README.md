@@ -18,12 +18,6 @@ Current version: **0.2.0** (integer version: `0.2`).
 * Added OPFS virtual drive letters, multiple disks, and working-directory access.
 * Added the Nano-style `edit` text editor with OPFS support.
 * Updated PowerTools to 1.0.4 with working debug controls and a local OPFS test runner.
-* Added Git ignore rules for local tests, virtual disk metadata, and Python caches.
-
-## Update log 0.1.5:
-* Added 'dvcman' (fix #9)
-* Added lots of CPUs ported from OP2
-* Added OP2 app compatibility (BETA)
 
 ## OPFS virtual filesystem
 
@@ -61,7 +55,6 @@ matching letter folder in the working directory. Files already in the working
 directory can be used directly, for example `run programs/ex2.py`.
 OPFS confines navigation to each drive and hides host paths in filesystem
 errors. Python programs, BIOS tools, and plugins still run as normal host code.
-## New issues identified:
 
 ## OP3 PowerTools 1.0.4
 
@@ -83,4 +76,5 @@ save prompt for modified text. Escape cancels prompts. Existing UTF-8 BOMs
 and Windows line endings are preserved. Tabs typed in the editor insert
 four spaces. Run it in an interactive Windows or Unix terminal.
 
+## New issues identified:
 
